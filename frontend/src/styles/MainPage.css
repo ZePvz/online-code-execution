@@ -1,0 +1,381 @@
+/* ─── CodeSphere IDE — MainPage.css ─────────────────────────────────────── */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg:        #0c0c15;
+  --surface:   #111120;
+  --panel:     #13132a;
+  --border:    rgba(110, 70, 230, 0.14);
+  --border-hi: rgba(110, 70, 230, 0.32);
+  --accent:    #7c3aed;
+  --accent-lt: #a78bfa;
+  --green:     #34d399;
+  --red:       #f87171;
+  --orange:    #fb923c;
+  --text:      #ddd8f0;
+  --muted:     #5a5678;
+  --mono:      'Cascadia Code', 'Fira Code', Consolas, 'Courier New', monospace;
+  --sans:      -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --history-width:   200px;
+  --terminal-height: 220px;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  overflow: hidden;
+}
+
+.AppShell {
+  display: grid;
+  height: 100vh;
+  width: 100vw;
+  grid-template-rows:    50px 1fr 5px var(--terminal-height);
+  grid-template-columns: var(--history-width) 5px 1fr;
+  grid-template-areas:
+    "title    title  title"
+    "history  divV   ide"
+    "history  divV   divH"
+    "history  divV   terminal";
+  overflow: hidden;
+  background: var(--bg);
+}
+
+
+/* ══════════════════════════════════════════════════════
+   TITLECARD
+   ══════════════════════════════════════════════════════ */
+
+.TitleCard {
+  grid-area: title;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  z-index: 10;
+}
+
+/* ── Brand / Logo ── */
+.TitleCard__brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-lt);
+  letter-spacing: -0.3px;
+  font-family: var(--mono);
+  flex-shrink: 0;
+}
+
+/* ── Language select wrapper ── */
+.TitleCard__langWrap {
+  flex-shrink: 0;
+  margin-right: auto;
+}
+
+.LangSelect {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border-hi);
+  border-radius: 8px;
+  padding: 5px 32px 5px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='M6 9l6 6 6-6' stroke='%235a5678' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.LangSelect:hover,
+.LangSelect:focus { border-color: var(--accent-lt); }
+
+.LangSelect option {
+  background: var(--panel);
+  color: var(--text);
+}
+
+/* ── StatusCard ── */
+.StatusCard {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(90, 86, 120, 0.15);
+  color: var(--muted);
+  flex-shrink: 0;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.StatusCard::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex-shrink: 0;
+}
+
+.StatusCard[data-state="Running…"]          { background: rgba(251,191,36,.1);  color: #fbbf24; }
+.StatusCard[data-state="Running…"]::before  { background: #fbbf24; animation: blink .8s infinite; }
+.StatusCard[data-state="Done"]              { background: rgba(52,211,153,.1);  color: var(--green); }
+.StatusCard[data-state="Done"]::before      { background: var(--green); }
+.StatusCard[data-state="Error"]             { background: rgba(248,113,113,.1); color: var(--red); }
+.StatusCard[data-state="Error"]::before     { background: var(--red); }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.15} }
+
+/* ── RunButton — NO pseudo-elements, icon+text live in JSX ── */
+.RunButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 18px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--sans);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.RunButton:hover    { opacity: 0.88; }
+.RunButton:active   { transform: scale(0.97); }
+.RunButton:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* ── UserCard ── */
+.UserCard {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 12px 3px 4px;
+  border: 1px solid var(--border-hi);
+  border-radius: 20px;
+  flex-shrink: 0;
+  transition: border-color 0.15s;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.UserCard:hover { border-color: var(--accent-lt); }
+
+.UserCard__avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  flex-shrink: 0;
+}
+
+.UserCard__name   { font-size: 12px; color: var(--text); }
+.UserCard__logout {
+  background: transparent;
+  border: 1px solid var(--border-hi);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.UserCard__logout:hover { color: var(--red); border-color: var(--red); }
+
+
+/* ══════════════════════════════════════════════════════
+   HISTORY
+   ══════════════════════════════════════════════════════ */
+
+.History {
+  grid-area: history;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 6px;
+}
+
+.History__label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  padding: 6px 8px 10px;
+}
+
+.History__empty {
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+  padding: 20px 8px;
+}
+
+.HistoryItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  margin-bottom: 3px;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.HistoryItem:hover { background: var(--panel); border-color: var(--border-hi); }
+
+.HistoryItem__lang {
+  font-size: 10px;
+  font-family: var(--mono);
+  background: rgba(124,58,237,.15);
+  color: var(--accent-lt);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.HistoryItem__icon { font-size: 12px; }
+.HistoryItem[data-success="true"]  .HistoryItem__icon { color: var(--green); }
+.HistoryItem[data-success="false"] .HistoryItem__icon { color: var(--red); }
+
+
+/* ══════════════════════════════════════════════════════
+   IDE
+   ══════════════════════════════════════════════════════ */
+
+.IDE {
+  grid-area: ide;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0d0d18;
+  min-width: 0;
+  min-height: 0;
+}
+
+.IDE > section,
+.IDE > div {
+  flex: 1 !important;
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0;
+  min-width: 0;
+}
+
+.IDE .monaco-editor,
+.IDE .monaco-editor .overflow-guard,
+.IDE .monaco-editor .margin,
+.IDE .monaco-editor .monaco-editor-background { background-color: #0d0d18 !important; }
+
+.IDE .monaco-editor .current-line          { background: rgba(124,58,237,.06) !important; border: none !important; }
+.IDE .monaco-editor .cursor                { background: var(--accent-lt) !important; border-color: var(--accent-lt) !important; }
+.IDE .monaco-editor .selected-text         { background: rgba(124,58,237,.22) !important; }
+.IDE .monaco-editor .line-numbers          { color: #2a2848 !important; }
+.IDE .monaco-editor .line-numbers.active-line-number { color: var(--accent-lt) !important; }
+
+.IDE .monaco-scrollable-element > .scrollbar > .slider       { background: rgba(124,58,237,.25) !important; border-radius: 3px !important; }
+.IDE .monaco-scrollable-element > .scrollbar > .slider:hover { background: rgba(167,139,250,.4) !important; }
+
+
+/* ══════════════════════════════════════════════════════
+   RESIZE DIVIDERS
+   ══════════════════════════════════════════════════════ */
+
+.ResizeDividerV {
+  grid-area: divV;
+  width: 5px;
+  background: var(--border);
+  cursor: col-resize;
+  user-select: none;
+  z-index: 20;
+  transition: background 0.15s;
+}
+
+.ResizeDividerV:hover,
+.ResizeDividerV.dragging { background: var(--accent); }
+
+.ResizeDividerH {
+  grid-area: divH;
+  height: 5px;
+  background: var(--border);
+  cursor: row-resize;
+  user-select: none;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.ResizeDividerH:hover,
+.ResizeDividerH.dragging { background: var(--accent); }
+
+.ResizeDividerH__grip {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: -8px 0 0 var(--muted), 8px 0 0 var(--muted);
+  pointer-events: none;
+}
+
+.ResizeDividerH:hover .ResizeDividerH__grip,
+.ResizeDividerH.dragging .ResizeDividerH__grip {
+  background: rgba(255,255,255,.6);
+  box-shadow: -8px 0 0 rgba(255,255,255,.6), 8px 0 0 rgba(255,255,255,.6);
+}
+
+
+/* ══════════════════════════════════════════════════════
+   TERMINAL
+   ══════════════════════════════════════════════════════ */
+
+.Terminal {
+  grid-area: terminal;
+  background: #0a0a14;
+  overflow: hidden;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.Terminal .xterm               { height: 100%; font-family: var(--mono) !important; font-size: 13px !important; }
+.Terminal .xterm-viewport      { background: transparent !important; overflow-y: auto !important; }
+.Terminal .xterm-screen canvas { background: transparent !important; }
+
+.Terminal .xterm-viewport::-webkit-scrollbar       { width: 5px; }
+.Terminal .xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+.Terminal .xterm-viewport::-webkit-scrollbar-thumb { background: rgba(124,58,237,.25); border-radius: 3px; }
+
+
+/* ─── Global scrollbar ───────────────────────────────────────────────────── */
+
+::-webkit-scrollbar             { width: 5px; height: 5px; }
+::-webkit-scrollbar-track       { background: transparent; }
+::-webkit-scrollbar-thumb       { background: rgba(124,58,237,.25); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(167,139,250,.4); }
