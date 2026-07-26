@@ -3,37 +3,11 @@ import { Terminal } from '@xterm/xterm';
 import { useEffect, useRef, useState } from 'react';
 import '../styles/MainPage.css';
 import { useAuth } from '../utils/AuthContext';
-import { io, Socket } from 'socket.io-client';
 
 const backendUrl = (import.meta as any).env?.VITE_BACKEND;
 
-// ─── Socket event types ───────────────────────────────────────────────────
-type ServerToClientEvents = {
-  jobResult:      (result: { success: boolean; output?: string; error?: string }) => void;
-  error:          (error: { message: string }) => void;
-  executionSaved: (data: { id: string }) => void;
-};
-
-type ClientToServerEvents = {
-  SubscribeToJob: (jobId: string) => void;
-  saveExecution:  (payload: SavePayload) => void;
-};
-
-type SavePayload = {
-  userId:    string | undefined;
-  language:  SupportedLanguage;
-  code:      string;
-  output:    string;
-  error:     string;
-  timestamp: string;
-};
-
 // ─── Language types ───────────────────────────────────────────────────────
-type SupportedLanguage =
-  | 'javascript' | 'typescript'
-  | 'python'
-  | 'java' | 'cpp' | 'c'
-  | 'json' | 'html' | 'css';
+type SupportedLanguage = 'javascript' | 'python' | 'java' | 'cpp';
 
 type Execution = {
   output:   string;
@@ -41,181 +15,36 @@ type Execution = {
   success:  boolean;
 };
 
-type RunResult = { output: string; error: string };
+type RunResult = {
+  stdout?:          string;
+  stderr?:          string;
+  exitCode?:        number;
+  compileError?:    string;
+  error?:           string;
+  stdoutTruncated?: boolean;
+  stderrTruncated?: boolean;
+};
 
-// ─── Worker source builder ────────────────────────────────────────────────
-function buildWorkerSource(lang: SupportedLanguage, code: string): string {
-
-  // ── JavaScript / TypeScript ──────────────────────────────────────────
-  if (lang === 'javascript' || lang === 'typescript') {
-    const stripped =
-      lang === 'typescript'
-        ? code
-            .replace(/:\s*\w+(\[\])?(\s*[|&]\s*\w+(\[\])?)*(?=[,)=;\n])/g, '')
-            .replace(/<[^>]+>/g, '')
-            .replace(/^\s*interface\s+\w+[^}]+}/gm, '')
-            .replace(/^\s*type\s+\w+[^;]+;/gm, '')
-        : code;
-
-    const escaped = JSON.stringify(stripped);
-    return `
-self.onmessage = function() {
-  const logs = [];
-  const errors = [];
-  const fakeConsole = {
-    log:   (...a) => logs.push(a.map(String).join(' ')),
-    warn:  (...a) => logs.push('[warn] ' + a.map(String).join(' ')),
-    error: (...a) => errors.push(a.map(String).join(' ')),
-    info:  (...a) => logs.push('[info] ' + a.map(String).join(' ')),
-  };
+// ─── Call the real backend ─────────────────────────────────────────────────
+async function runOnBackend(language: SupportedLanguage, code: string): Promise<RunResult> {
   try {
-    const fn = new Function('console', ${escaped});
-    fn(fakeConsole);
-    self.postMessage({ output: logs.join('\\n'), error: errors.join('\\n') });
-  } catch(e) {
-    self.postMessage({ output: logs.join('\\n'), error: e.message });
-  }
-};`;
-  }
-
-  // ── Python (Pyodide) ─────────────────────────────────────────────────
-  if (lang === 'python') {
-    const escaped = JSON.stringify(code);
-    return `
-importScripts('https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js');
-self.onmessage = async function() {
-  try {
-    const pyodide = await loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.25.1/full/' });
-    await pyodide.runPythonAsync(\`
-import sys
-from io import StringIO
-_out = StringIO()
-_err = StringIO()
-sys.stdout = _out
-sys.stderr = _err
-\`);
-    let userError = '';
-    try {
-      await pyodide.runPythonAsync(${escaped});
-    } catch(e) {
-      userError = e.message;
-    }
-    const stdout = await pyodide.runPythonAsync('_out.getvalue()');
-    const stderr = await pyodide.runPythonAsync('_err.getvalue()');
-    self.postMessage({ output: stdout || '', error: stderr || userError });
-  } catch(e) {
-    self.postMessage({ output: '', error: e.message });
-  }
-};`;
-  }
-
-  // ── C / C++ (via backend proxy → Wandbox) ────────────────────────────
-  if (lang === 'c' || lang === 'cpp') {
-    const apiLang = lang === 'cpp' ? 'cpp' : 'c';
-    const escaped  = JSON.stringify(code);
-    return `
-self.onmessage = async function() {
-  try {
-    const res = await fetch('${backendUrl}/compile', {
+    const res = await fetch(`${backendUrl}/run`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: ${escaped}, language: '${apiLang}' }),
+      body: JSON.stringify({ language, code }),
     });
-    const data = await res.json();
+
+    const data: RunResult = await res.json();
+
     if (!res.ok) {
-      self.postMessage({ output: '', error: data.error || 'Compile request failed' });
-      return;
+      return { error: (data as any).error || 'Request failed' };
     }
-    const compilerErr = data.compilerError || '';
-    const runtimeErr  = data.error        || '';
-    const errorOut    = [compilerErr, runtimeErr].filter(Boolean).join('\\n');
-    self.postMessage({
-      output: data.output || '',
-      error:  data.success ? errorOut : (errorOut || 'Compilation failed'),
-    });
-  } catch(e) {
-    self.postMessage({ output: '', error: 'Could not reach compile service: ' + e.message });
+
+    return data;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'Unknown error';
+    return { error: `Could not reach backend: ${msg}` };
   }
-};`;
-  }
-
-  // ── Java (CheerpJ 3) ─────────────────────────────────────────────────
-  if (lang === 'java') {
-    const escaped = JSON.stringify(code);
-    return `
-importScripts('https://cjrtnc.leaningtech.com/3.0/cj3loader.js');
-self.onmessage = async function() {
-  const output = [];
-  try {
-    await cheerpjInit({
-      version: 21,
-      javaProperties: ['java.io.tmpdir=/str/tmp'],
-      printErr: (line) => output.push('[stderr] ' + line),
-      print:    (line) => output.push(line),
-    });
-    const className = (() => {
-      const m = ${escaped}.match(/public\\s+class\\s+(\\w+)/);
-      return m ? m[1] : 'Main';
-    })();
-    const srcPath = '/str/' + className + '.java';
-    await cheerpjFileBlob(srcPath, new TextEncoder().encode(${escaped}));
-    const exitCode = await cheerpjRunMain(
-      'com.sun.tools.javac.Main',
-      '/app/tools.jar:/str/',
-      srcPath, '-d', '/str/'
-    );
-    if (exitCode !== 0) {
-      self.postMessage({ output: output.join('\\n'), error: 'Compilation failed' });
-      return;
-    }
-    await cheerpjRunMain(className, '/str/');
-    self.postMessage({ output: output.join('\\n'), error: '' });
-  } catch(e) {
-    self.postMessage({ output: output.join('\\n'), error: e.message });
-  }
-};`;
-  }
-
-  // ── Fallback (json / html / css) ─────────────────────────────────────
-  return `
-self.onmessage = function() {
-  self.postMessage({
-    output: 'Preview not available for ${lang} in the terminal.',
-    error: '',
-  });
-};`;
-}
-
-// ─── Run in worker ────────────────────────────────────────────────────────
-function runInWorker(lang: SupportedLanguage, code: string, timeoutMs = 30_000): Promise<RunResult> {
-  return new Promise((resolve) => {
-    const src    = buildWorkerSource(lang, code);
-    const blob   = new Blob([src], { type: 'application/javascript' });
-    const url    = URL.createObjectURL(blob);
-    const worker = new Worker(url);
-
-    const timer = setTimeout(() => {
-      worker.terminate();
-      URL.revokeObjectURL(url);
-      resolve({ output: '', error: `Execution timed out after ${timeoutMs / 1000}s` });
-    }, timeoutMs);
-
-    worker.onmessage = ({ data }: MessageEvent<RunResult>) => {
-      clearTimeout(timer);
-      worker.terminate();
-      URL.revokeObjectURL(url);
-      resolve(data);
-    };
-
-    worker.onerror = (e) => {
-      clearTimeout(timer);
-      worker.terminate();
-      URL.revokeObjectURL(url);
-      resolve({ output: '', error: e.message ?? 'Unknown worker error' });
-    };
-
-    worker.postMessage(null);
-  });
 }
 
 // ─── Component ────────────────────────────────────────────────────────────
@@ -224,7 +53,6 @@ function MainPage() {
 
   const terminalRef         = useRef<HTMLDivElement | null>(null);
   const appShellRef         = useRef<HTMLDivElement | null>(null);
-  const socketRef           = useRef<Socket<ServerToClientEvents, ClientToServerEvents> | null>(null);
   const terminalInstanceRef = useRef<Terminal | null>(null);
 
   const [state,          setState]          = useState<string>('');
@@ -236,11 +64,7 @@ function MainPage() {
   const [isDraggingV,    setIsDraggingV]    = useState(false);
   const [isDraggingH,    setIsDraggingH]    = useState(false);
 
-  const LANGUAGES: SupportedLanguage[] = [
-    'javascript', 'typescript', 'python',
-    'java', 'cpp', 'c',
-    'json', 'html', 'css',
-  ];
+  const LANGUAGES: SupportedLanguage[] = ['javascript', 'python', 'java', 'cpp'];
 
   const term = () => terminalInstanceRef.current;
 
@@ -277,31 +101,12 @@ function MainPage() {
 
     if (terminalRef.current) {
       terminal.open(terminalRef.current);
-      terminal.write('\x1b[36mWASM Shell ready.\x1b[0m\r\n');
+      terminal.write('\x1b[36mCodeSphere ready.\x1b[0m\r\n');
       terminal.write('\x1b[90mSelect a language, write code, then press Run.\x1b[0m\r\n\r\n');
     }
 
     terminalInstanceRef.current = terminal;
     return () => terminal.dispose();
-  }, []);
-
-  // ── Socket.IO ────────────────────────────────────────────────────────
-  useEffect(() => {
-    const backendUrl = (import.meta as any).env.VITE_BACKEND;
-    const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(backendUrl, {
-      reconnection:         true,
-      reconnectionDelay:    1000,
-      reconnectionDelayMax: 5000,
-      reconnectionAttempts: 5,
-    });
-
-    socket.on('executionSaved', ({ id }) => writeLine(`✓ Saved (id: ${id})`, 'green'));
-    socket.on('error', (err) => writeLine(`Socket error: ${err.message}`, 'red'));
-    socket.on('connect_error', (err) => console.error('Socket.IO error:', err));
-
-    socketRef.current = socket;
-    return () => { socket.disconnect(); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Vertical resize ──────────────────────────────────────────────────
@@ -356,45 +161,52 @@ function MainPage() {
     setState('Running…');
     terminalInstanceRef.current?.clear();
 
-    try {
-      const result = await runInWorker(lang, code, 60_000);
+    const result = await runOnBackend(lang, code);
 
-      if (result.output) {
-        writeLine('─── Output ────────────────────────────', 'cyan');
-        result.output.split('\n').forEach((line) => writeLine(line));
-        writeLine('────────────────────────────────────', 'cyan');
-      }
-
-      if (result.error) {
-        writeLine('─── Error ─────────────────────────────', 'red');
-        result.error.split('\n').forEach((line) => writeLine(line, 'red'));
-        writeLine('────────────────────────────────────', 'red');
-      }
-
-      const success = !result.error;
-
-      addExecution({ output: result.output, language: lang, success });
-
-      const socket = socketRef.current;
-      if (socket?.connected) {
-        socket.emit('saveExecution', {
-          userId:    user?.id,
-          language:  lang,
-          code,
-          output:    result.output,
-          error:     result.error,
-          timestamp: new Date().toISOString(),
-        });
-      }
-
-      setState(success ? 'Done' : 'Error');
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      writeLine(`Fatal: ${msg}`, 'red');
+    // Case 1: request-level or timeout error
+    if (result.error) {
+      writeLine('─── Error ─────────────────────────────', 'red');
+      writeLine(result.error, 'red');
+      writeLine('────────────────────────────────────', 'red');
+      addExecution({ output: '', language: lang, success: false });
       setState('Error');
-    } finally {
       setTimeout(() => setState(''), 2500);
+      return;
     }
+
+    // Case 2: compile-time error (only relevant for cpp/java)
+    if (result.compileError) {
+      writeLine('─── Compile Error ─────────────────────', 'red');
+      result.compileError.split('\n').forEach((line) => writeLine(line, 'red'));
+      writeLine('────────────────────────────────────', 'red');
+      addExecution({ output: '', language: lang, success: false });
+      setState('Error');
+      setTimeout(() => setState(''), 2500);
+      return;
+    }
+
+    // Case 3: normal run result
+    const stdout = result.stdout ?? '';
+    const stderr = result.stderr ?? '';
+
+    if (stdout) {
+      writeLine('─── Output ────────────────────────────', 'cyan');
+      stdout.split('\n').forEach((line) => writeLine(line));
+      if (result.stdoutTruncated) writeLine('[output truncated]', 'yellow');
+      writeLine('────────────────────────────────────', 'cyan');
+    }
+
+    if (stderr) {
+      writeLine('─── Stderr ─────────────────────────────', 'red');
+      stderr.split('\n').forEach((line) => writeLine(line, 'red'));
+      if (result.stderrTruncated) writeLine('[output truncated]', 'yellow');
+      writeLine('────────────────────────────────────', 'red');
+    }
+
+    const success = (result.exitCode ?? 1) === 0;
+    addExecution({ output: stdout, language: lang, success });
+    setState(success ? 'Done' : 'Error');
+    setTimeout(() => setState(''), 2500);
   };
 
   // ── Render ───────────────────────────────────────────────────────────
@@ -483,7 +295,7 @@ function MainPage() {
           height="100%"
           width="100%"
           theme="vs-dark"
-          language={lang}
+          language={lang === 'cpp' ? 'cpp' : lang}
           value={code}
           onChange={(v) => setCode(v ?? '')}
           options={{
