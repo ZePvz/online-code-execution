@@ -1,18 +1,19 @@
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-function App() {
-  const [code, setCode] = useState("")
+import {BrowserRouter , Routes , Route} from 'react-router-dom';
+import Workspace from  './pages/Workspace';
+import Login from './pages/login';
+import Signup from './pages/Signup';
 
-  return (
-    <>
-      <textarea
-      value={code}
-      onChange={(e)=>setCode(e.target.value)}
-      placeholder="write your code here"
-      />
-      <Button>Run</Button>
-    </>
-  );
+
+function App(){
+  return(
+    <BrowserRouter>
+    <Routes>
+      <Route path = "/" element={<Workspace/>}/>
+      <Route path = "/login" element={<Login/>}/>
+      <Route path = "signup" element={<Signup/>}/>
+    </Routes>
+    </BrowserRouter>
+  )
 }
 
 export default App;
