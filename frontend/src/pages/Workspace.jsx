@@ -7,13 +7,7 @@ import { useNavigate } from "react-router-dom";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
-const LogOut = function () {
-  const navigate = useNavigate();
-  const { logout } = useAuth();
-  logout();
-  navigate("/login")
 
-}
 function Workspace() {
   const { user, logout } = useAuth();
 
