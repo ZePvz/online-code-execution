@@ -3,21 +3,38 @@ import { Button } from "@/components/ui/button";
 import LanguageSelector from "../components/LanguageSelector";
 import OutputPanel from "../components/OutputPanel";
 import { useAuth } from "../utils/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
+const LogOut = function () {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  logout();
+  navigate("/login")
 
+}
 function Workspace() {
   const { user, logout } = useAuth();
 
+  const navigate = useNavigate();
 
-  const [code, setCode] = useState(""); 
+  const [code, setCode] = useState("");
   const [language, setLanguage] = useState("cpp");
   const [result, setResult] = useState(null);
   const [running, setRunning] = useState(false);
 
-   const handleRun = async () => {
-    if(!code.trim())return;
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate("/login", { replace: true });
+    } catch (err) {
+      console.error("Failed to log out:", err);
+    }
+  };
+
+  const handleRun = async () => {
+    if (!code.trim()) return;
     setRunning(true);
     setResult(null);
 
@@ -40,11 +57,11 @@ function Workspace() {
   const status = running
     ? { text: "Running", color: "bg-yellow-500" }
     : result?.error || result?.compileError || result?.stderr
-    ? { text: "Error", color: "bg-red-500" }
-    : result
-    ? { text: "Success", color: "bg-green-500" }
-    : { text: "Idle", color: "bg-gray-400" };
-  
+      ? { text: "Error", color: "bg-red-500" }
+      : result
+        ? { text: "Success", color: "bg-green-500" }
+        : { text: "Idle", color: "bg-gray-400" };
+
   return (
     <div className="flex flex-col h-screen bg-background">
       {/* Header */}
@@ -71,7 +88,7 @@ function Workspace() {
           {user && (
             <div className="flex items-center gap-2 pl-3 border-l">
               <span className="text-sm text-muted-foreground">{user.email}</span>
-              <Button variant="outline" size="sm" onClick={logout}>
+              <Button variant="outline" size="sm" onClick={handleLogout}>
                 Logout
               </Button>
             </div>
