@@ -4,6 +4,7 @@ import { useNavigate,Link } from "react-router-dom";
 import { Button } from '@/components/ui/button';
 import { Input } from  '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useAuth } from "../utils/AuthContext";
 
 function Login(){
     const navigate = useNavigate();
@@ -51,7 +52,7 @@ function Login(){
         if(!authLoading && user){
           navigate("/")
         }
-    },[authLoading,user,navigate]);
+    },[authLoading,user]);
 
     return(
         <>

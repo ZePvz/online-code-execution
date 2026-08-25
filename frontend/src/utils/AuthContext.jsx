@@ -13,6 +13,30 @@ export function AuthProvider({ children }){
             setUser(session?.user ?? null);
             setLoading(false);
         });
+
+        const { data: listner } = supabase.auth.onAuthStateChange((_event,session)=>{
+        setUser(session?.user ?? null);
+        });
+
+        return () => {
+            listner.subscription.unsubscribe();
+        }
         
-    })
+    },[]);
+
+    const logout = async () => {
+        await supabase.auth.signOut();
+    }
+
+    const value = { user, loading, logout };
+    
+    return (
+        <AuthContext.Provider value={value}>
+            {children}
+        </AuthContext.Provider>
+    );
+}
+
+export function useAuth(){
+    return useContext(AuthContext);
 }
